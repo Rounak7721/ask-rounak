@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
+import { useRecorder } from "@/hooks/useRecorder";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,6 +35,43 @@ export default function Home() {
     }
   }
 
+  const [notice, setNotice] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
+  const { recording, start, stop } = useRecorder(handleAudio);
+
+  async function handleAudio(audio: Blob) {
+    setTranscribing(true);
+    setNotice("");
+    try {
+      const form = new FormData();
+      form.append("audio", audio);
+      const res = await fetch("/api/transcribe", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok || !data.text) {
+        setNotice("Sorry, I didn't catch that. Please try again.");
+        return;
+      }
+      send(data.text);
+    } catch {
+      setNotice("Couldn't reach the server. Please try again.");
+    } finally {
+      setTranscribing(false);
+    }
+  }
+
+  async function toggleMic() {
+    if (recording) {
+      stop();
+      return;
+    }
+    setNotice("");
+    try {
+      await start();
+    } catch {
+      setNotice("Microphone access was blocked. Allow it in your browser, or type your question.");
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 p-6">
       <h1 className="text-2xl font-semibold">Ask Rounak</h1>
@@ -49,7 +87,10 @@ export default function Home() {
           </li>
         ))}
         {loading && <li className="self-start text-zinc-500">Thinking…</li>}
+        {transcribing && <li className="self-end text-zinc-500">Transcribing…</li>}
       </ul>
+
+      {notice && <p className="text-sm text-red-600">{notice}</p>}
 
       <form
         onSubmit={(e) => {
@@ -58,6 +99,14 @@ export default function Home() {
         }}
         className="flex gap-2"
       >
+        <button
+          type="button"
+          onClick={toggleMic}
+          disabled={loading || transcribing}
+          className={`rounded-full px-4 py-2 text-white disabled:opacity-50 ${recording ? "bg-red-600" : "bg-zinc-800"}`}
+        >
+          {recording ? "Stop" : "🎤"}
+        </button>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
