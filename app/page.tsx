@@ -204,7 +204,8 @@ export default function Home() {
         <button
           type="button"
           onClick={toggleMic}
-          disabled={loading || transcribing}
+                    disabled={loading || transcribing || live}
+
           className={`rounded-full px-4 py-2 text-white disabled:opacity-50 ${recording ? "bg-red-600" : "bg-zinc-800"}`}
         >
           {recording ? "Stop" : "🎤"}
