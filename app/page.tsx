@@ -104,6 +104,12 @@ export default function Home() {
     }
   }
 
+  const footer = (
+    <p className="text-center text-xs text-zinc-500">
+      This is an AI version of Rounak. Questions and answers are logged to improve it. No IP addresses are stored.
+    </p>
+  );
+
   if (!started) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6 text-center">
@@ -119,6 +125,7 @@ export default function Home() {
         >
           Start
         </button>
+        {footer}
       </main>
     );
   }
@@ -185,6 +192,7 @@ export default function Home() {
           Send
         </button>
       </form>
+      {footer}
     </main>
   );
 }
