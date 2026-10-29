@@ -24,6 +24,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
   const sessionIdRef = useRef("");
+  const abortRef = useRef<AbortController | null>(null);
+
   const { speaking, speak, stop: stopSpeaking, unlock } = useSpeech();
 
 
@@ -36,9 +38,12 @@ export default function Home() {
     setInput("");
     setLoading(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
+        signal: controller.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: next.slice(-10), sessionId: sessionIdRef.current, inputMode }),
       });
@@ -54,6 +59,7 @@ export default function Home() {
         setLoading(false);
       });
     } catch {
+      if (controller.signal.aborted) return;
       setMessages([...next, { role: "assistant", content: "Sorry, I couldn't reach the server." }]);
       setLoading(false);
     }
@@ -62,7 +68,13 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const { recording, start, stop } = useRecorder(handleAudio, handleNoSpeech);
-  const { live, start: startLive, stop: stopLive } = useLive(stopSpeaking, (wav) => handleAudio(wav, "live"));
+  const { live, start: startLive, stop: stopLive } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
+
+  function interrupt() {
+    abortRef.current?.abort();
+    stopSpeaking();
+    setLoading(false);
+  }
 
 
   function handleNoSpeech() {
@@ -77,7 +89,9 @@ export default function Home() {
     try {
       const form = new FormData();
       form.append("audio", audio);
-      const res = await fetch("/api/transcribe", { method: "POST", body: form });
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const res = await fetch("/api/transcribe", { method: "POST", body: form, signal: controller.signal });
       const data = await res.json();
       if (!res.ok) {
         setNotice(res.status === 429 ? `Too many questions too fast. Try again in ${waitText(data.retryAfter)}.` : "Sorry, something went wrong. Please try again.");
@@ -86,7 +100,8 @@ export default function Home() {
       if (!/[a-z]/i.test(data.text ?? "")) return inputMode === "live" ? undefined : handleNoSpeech();
       send(data.text, inputMode);
 
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setNotice("Couldn't reach the server. Please try again.");
     } finally {
       setTranscribing(false);

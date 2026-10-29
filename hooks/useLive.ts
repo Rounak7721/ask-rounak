@@ -18,7 +18,7 @@ export function useLive(onSpeechStart: () => void, onSpeechEnd: (wav: Blob) => v
         vadRef.current = await MicVAD.new({
             baseAssetPath: `${CDN}@ricky0123/vad-web@0.0.31/dist/`,
             onnxWASMBasePath: `${CDN}onnxruntime-web@1.31.1/dist/`,
-            onSpeechStart: () => handlersRef.current.onSpeechStart(),
+            onSpeechRealStart: () => handlersRef.current.onSpeechStart(),
             onSpeechEnd: (audio) =>
                 handlersRef.current.onSpeechEnd(new Blob([utils.encodeWAV(audio)], { type: "audio/wav" })),
 
