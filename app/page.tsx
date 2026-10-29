@@ -7,6 +7,12 @@ import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
 import type { InputMode } from "@/lib/log";
 
+const NO_SPEECH_REPLIES = [
+  "Sorry, I didn't catch that. Could you say it again?",
+  "I couldn't hear anything there. Mind trying once more?",
+  "Hmm, that was a bit quiet. Could you repeat the question?",
+];
+
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -45,7 +51,12 @@ export default function Home() {
 
   const [notice, setNotice] = useState("");
   const [transcribing, setTranscribing] = useState(false);
-  const { recording, start, stop } = useRecorder(handleAudio);
+  const { recording, start, stop } = useRecorder(handleAudio, handleNoSpeech);
+
+  function handleNoSpeech() {
+    const line = NO_SPEECH_REPLIES[Math.floor(Math.random() * NO_SPEECH_REPLIES.length)];
+    speak(line, () => setMessages((prev) => [...prev, { role: "assistant", content: line }]));
+  }
 
   async function handleAudio(audio: Blob) {
     setTranscribing(true);
@@ -55,10 +66,11 @@ export default function Home() {
       form.append("audio", audio);
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
       const data = await res.json();
-      if (!res.ok || !data.text) {
-        setNotice("Sorry, I didn't catch that. Please try again.");
+      if (!res.ok) {
+        setNotice("Sorry, something went wrong. Please try again.");
         return;
       }
+      if (!/[a-z]/i.test(data.text ?? "")) return handleNoSpeech();
       send(data.text, "voice");
     } catch {
       setNotice("Couldn't reach the server. Please try again.");

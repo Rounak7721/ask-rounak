@@ -9,7 +9,6 @@ export async function transcribe(audio: Blob, filename: string): Promise<string>
     form.append("language", "en");
     form.append("prompt", "Interview questions for Rounak about ClauseGuard, MindDesk, IRIS, 100x, Kolhapur, Goa, AI agents.");
 
-
     const res = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
