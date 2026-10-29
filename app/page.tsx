@@ -1,20 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
+import type { InputMode } from "@/lib/log";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const sessionIdRef = useRef("");
   const { speaking, speak, stop: stopSpeaking, unlock } = useSpeech();
 
 
-  async function send(text: string) {
+  async function send(text: string, inputMode: InputMode) {
     const question = text.trim();
     if (!question || loading) return;
 
@@ -27,7 +29,7 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-10) }),
+        body: JSON.stringify({ messages: next.slice(-10), sessionId: sessionIdRef.current, inputMode }),
       });
       const data = await res.json();
       const reply = res.ok && data.reply ? data.reply : "Sorry, something went wrong. Please try again.";
@@ -57,7 +59,7 @@ export default function Home() {
         setNotice("Sorry, I didn't catch that. Please try again.");
         return;
       }
-      send(data.text);
+      send(data.text, "voice");
     } catch {
       setNotice("Couldn't reach the server. Please try again.");
     } finally {
@@ -88,6 +90,7 @@ export default function Home() {
         <p className="text-zinc-500">Ask me any questions by voice or text.</p>
         <button
           onClick={() => {
+            sessionIdRef.current = crypto.randomUUID();
             unlock();
             setStarted(true);
           }}
@@ -138,7 +141,7 @@ export default function Home() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          send(input);
+          send(input, "text");
         }}
         className="flex gap-2"
       >
