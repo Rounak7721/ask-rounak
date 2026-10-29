@@ -4,11 +4,15 @@ import { useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
 import { useRecorder } from "@/hooks/useRecorder";
+import { useSpeech } from "@/hooks/useSpeech";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
+  const { speaking, speak, stop: stopSpeaking, unlock } = useSpeech();
+
 
   async function send(text: string) {
     const question = text.trim();
@@ -28,6 +32,7 @@ export default function Home() {
       const data = await res.json();
       const reply = res.ok && data.reply ? data.reply : "Sorry, something went wrong. Please try again.";
       setMessages([...next, { role: "assistant", content: reply }]);
+      speak(reply);
     } catch {
       setMessages([...next, { role: "assistant", content: "Sorry, I couldn't reach the server." }]);
     } finally {
@@ -64,6 +69,9 @@ export default function Home() {
       stop();
       return;
     }
+
+    stopSpeaking();
+
     setNotice("");
     try {
       await start();
@@ -71,6 +79,35 @@ export default function Home() {
       setNotice("Microphone access was blocked. Allow it in your browser, or type your question.");
     }
   }
+
+  if (!started) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6 text-center">
+        <h1 className="text-3xl font-semibold">Ask Rounak</h1>
+        <p className="text-zinc-500">Ask me any questions by voice or text.</p>
+        <button
+          onClick={() => {
+            unlock();
+            setStarted(true);
+          }}
+          className="rounded-full bg-indigo-600 px-8 py-3 text-lg text-white"
+        >
+          Start
+        </button>
+      </main>
+    );
+  }
+
+  const status = recording
+    ? "Listening… tap Stop when you're done."
+    : transcribing
+      ? "Transcribing…"
+      : loading
+        ? "Thinking…"
+        : speaking
+          ? "Speaking…"
+          : "Tap 🎤 to ask, or type below.";
+
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 p-6">
@@ -86,11 +123,16 @@ export default function Home() {
             {m.content}
           </li>
         ))}
-        {loading && <li className="self-start text-zinc-500">Thinking…</li>}
-        {transcribing && <li className="self-end text-zinc-500">Transcribing…</li>}
       </ul>
 
-      {notice && <p className="text-sm text-red-600">{notice}</p>}
+      <div className="flex items-center justify-between text-sm">
+        <p className={notice ? "text-red-600" : "text-zinc-500"}>{notice || status}</p>
+        {speaking && (
+          <button type="button" onClick={stopSpeaking} className="text-indigo-600">
+            Stop speaking
+          </button>
+        )}
+      </div>
 
       <form
         onSubmit={(e) => {
