@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-type ChatMessage = { role: "user" | "assistant"; content: string };
+import type { ChatMessage } from "@/lib/llm/types";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -42,9 +42,8 @@ export default function Home() {
         {messages.map((m, i) => (
           <li
             key={i}
-            className={`max-w-[85%] rounded-2xl px-4 py-2 ${
-              m.role === "user" ? "self-end bg-indigo-600 text-white" : "self-start bg-zinc-100 text-zinc-900"
-            }`}
+            className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user" ? "self-end bg-indigo-600 text-white" : "self-start bg-zinc-100 text-zinc-900"
+              }`}
           >
             {m.content}
           </li>
