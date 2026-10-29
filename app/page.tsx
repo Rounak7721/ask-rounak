@@ -6,6 +6,7 @@ import type { ChatMessage } from "@/lib/llm/types";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
 import type { InputMode } from "@/lib/log";
+import { useLive } from "@/hooks/useLive";
 
 function waitText(seconds: number) {
   return seconds >= 60 ? `${Math.ceil(seconds / 60)} minutes` : `${seconds} seconds`;
@@ -61,13 +62,16 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const { recording, start, stop } = useRecorder(handleAudio, handleNoSpeech);
+  const { live, start: startLive, stop: stopLive } = useLive(stopSpeaking, (wav) => handleAudio(wav, "live"));
+
 
   function handleNoSpeech() {
     const line = NO_SPEECH_REPLIES[Math.floor(Math.random() * NO_SPEECH_REPLIES.length)];
     speak(line, () => setMessages((prev) => [...prev, { role: "assistant", content: line }]));
   }
 
-  async function handleAudio(audio: Blob) {
+  async function handleAudio(audio: Blob, inputMode: InputMode = "voice") {
+
     setTranscribing(true);
     setNotice("");
     try {
@@ -79,8 +83,9 @@ export default function Home() {
         setNotice(res.status === 429 ? `Too many questions too fast. Try again in ${waitText(data.retryAfter)}.` : "Sorry, something went wrong. Please try again.");
         return;
       }
-      if (!/[a-z]/i.test(data.text ?? "")) return handleNoSpeech();
-      send(data.text, "voice");
+      if (!/[a-z]/i.test(data.text ?? "")) return inputMode === "live" ? undefined : handleNoSpeech();
+      send(data.text, inputMode);
+
     } catch {
       setNotice("Couldn't reach the server. Please try again.");
     } finally {
@@ -173,6 +178,14 @@ export default function Home() {
         }}
         className="flex gap-2"
       >
+        <button
+          type="button"
+          onClick={() => (live ? stopLive() : startLive().catch(() => setNotice("Microphone access was blocked. Allow it in your browser, or type your question.")))}
+          className="rounded-full bg-zinc-800 px-4 py-2 text-white"
+        >
+          {live ? "Live ●" : "Live"}
+        </button>
+
         <button
           type="button"
           onClick={toggleMic}
