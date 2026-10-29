@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onStartRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const synth = window.speechSynthesis;
@@ -24,22 +26,48 @@ export function useSpeech() {
     return () => synth.removeEventListener("voiceschanged", pickVoice);
   }, []);
 
-  function speak(text: string) {
+  function flushStart() {
+    const fn = onStartRef.current;
+    onStartRef.current = null;
+    fn?.();
+  }
+
+  function speakBrowser(text: string) {
     const synth = window.speechSynthesis;
-    if (!synth) return;
+    if (!synth) return flushStart();
     synth.cancel();
 
     const sentences = text.match(/[^.!?]+[.!?]*/g) ?? [text];
     sentences.forEach((sentence, i) => {
       const u = new SpeechSynthesisUtterance(sentence.trim());
       if (voiceRef.current) u.voice = voiceRef.current;
-      if (i === 0) u.onstart = () => setSpeaking(true);
+      if (i === 0) u.onstart = () => { flushStart(); setSpeaking(true); };
       if (i === sentences.length - 1) u.onend = () => setSpeaking(false);
       synth.speak(u);
     });
   }
 
+  function speak(text: string, onStart?: () => void) {
+    stop();
+    onStartRef.current = onStart ?? null;
+    const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
+    audioRef.current = audio;
+    audio.onplaying = () => { flushStart(); setSpeaking(true); };
+    audio.onended = () => setSpeaking(false);
+    audio.play().catch(() => {
+      if (audioRef.current === audio) speakBrowser(text);
+    });
+  }
+
   function stop() {
+    flushStart();
+    const audio = audioRef.current;
+    audioRef.current = null;
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+    }
     window.speechSynthesis?.cancel();
     setSpeaking(false);
   }

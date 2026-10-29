@@ -31,11 +31,12 @@ export default function Home() {
       });
       const data = await res.json();
       const reply = res.ok && data.reply ? data.reply : "Sorry, something went wrong. Please try again.";
-      setMessages([...next, { role: "assistant", content: reply }]);
-      speak(reply);
+      speak(reply, () => {
+        setMessages([...next, { role: "assistant", content: reply }]);
+        setLoading(false);
+      });
     } catch {
       setMessages([...next, { role: "assistant", content: "Sorry, I couldn't reach the server." }]);
-    } finally {
       setLoading(false);
     }
   }
