@@ -2,8 +2,11 @@ import { chatWithFallback } from "@/lib/llm";
 import type { ChatMessage } from "@/lib/llm/types"
 import { after } from "next/server";
 import { INPUT_MODES, logQA, type InputMode } from "@/lib/log";
+import { rateLimited } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
+    const wait = rateLimited(req, "chat", 30);
+    if (wait) return Response.json({ error: "Too many requests", retryAfter: wait }, { status: 429 });
     const body = await req.json().catch(() => null);
     const messages = body?.messages;
 

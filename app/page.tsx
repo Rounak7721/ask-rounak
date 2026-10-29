@@ -7,6 +7,10 @@ import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
 import type { InputMode } from "@/lib/log";
 
+function waitText(seconds: number) {
+  return seconds >= 60 ? `${Math.ceil(seconds / 60)} minutes` : `${seconds} seconds`;
+}
+
 const NO_SPEECH_REPLIES = [
   "Sorry, I didn't catch that. Could you say it again?",
   "I couldn't hear anything there. Mind trying once more?",
@@ -38,7 +42,12 @@ export default function Home() {
         body: JSON.stringify({ messages: next.slice(-10), sessionId: sessionIdRef.current, inputMode }),
       });
       const data = await res.json();
-      const reply = res.ok && data.reply ? data.reply : "Sorry, something went wrong. Please try again.";
+      const reply =
+        res.status === 429
+          ? `You're asking faster than I can think! Try again in ${waitText(data.retryAfter)}.`
+          : res.ok && data.reply
+            ? data.reply
+            : "Sorry, something went wrong. Please try again.";
       speak(reply, () => {
         setMessages([...next, { role: "assistant", content: reply }]);
         setLoading(false);
@@ -67,7 +76,7 @@ export default function Home() {
       const res = await fetch("/api/transcribe", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) {
-        setNotice("Sorry, something went wrong. Please try again.");
+        setNotice(res.status === 429 ? `Too many questions too fast. Try again in ${waitText(data.retryAfter)}.` : "Sorry, something went wrong. Please try again.");
         return;
       }
       if (!/[a-z]/i.test(data.text ?? "")) return handleNoSpeech();
