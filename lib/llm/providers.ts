@@ -1,16 +1,24 @@
-import type { Provider, ProviderName } from "./types";
+import { ENDPOINTS, LLM, MODELS } from "@/lib/config";
+import type { Target } from "./types";
 
-export const PROVIDERS: Record<ProviderName, Provider> = {
-  groq: {
-    name: "groq",
-    baseUrl: "https://api.groq.com/openai/v1",
-    apiKey: process.env.GROQ_API_KEY,
-    model: process.env.GROQ_CHAT_MODEL,
-  },
-  gemini: {
-    name: "gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL,
-  },
+// Each Groq model has its own tokens-per-minute limit, so a second model is a second bucket.
+const groq = (id: string, model: string | undefined): Target => ({
+  id,
+  baseUrl: ENDPOINTS.groq,
+  apiKey: process.env.GROQ_API_KEY,
+  model,
+});
+
+const GROQ = [groq("groq", MODELS.groqChat), groq("groq-2", MODELS.groqChat2)];
+
+const GEMINI: Target = {
+  id: "gemini",
+  baseUrl: ENDPOINTS.gemini,
+  apiKey: process.env.GEMINI_API_KEY,
+  model: MODELS.gemini,
 };
+
+// Try order. Targets without a key or model are left out.
+export const TARGETS: Target[] = (LLM.primary === "gemini" ? [GEMINI, ...GROQ] : [...GROQ, GEMINI]).filter(
+  (t) => t.apiKey && t.model,
+);

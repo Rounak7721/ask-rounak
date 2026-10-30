@@ -1,10 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { RECORDING } from "@/lib/config";
 
-export const MAX_MS = 60_000;
-const MIN_MS = 1_000;
-const SPEECH_RMS = 0.02;
 
 export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => void) {
   const [recording, setRecording] = useState(false);
@@ -27,7 +25,7 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
     const poll = setInterval(() => {
       analyser.getFloatTimeDomainData(buf);
       const rms = Math.sqrt(buf.reduce((sum, x) => sum + x * x, 0) / buf.length);
-      if (rms > SPEECH_RMS) heard = true;
+      if (rms > RECORDING.speechRms) heard = true;
     }, 100);
     const startedAt = Date.now();
 
@@ -40,13 +38,13 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
       ctx.close();
       stream.getTracks().forEach((t) => t.stop());
       setRecording(false);
-      if (discardRef.current || Date.now() - startedAt < MIN_MS) return;
+      if (discardRef.current || Date.now() - startedAt < RECORDING.minMs) return;
       if (vadWorked && !heard) return onNoSpeech();
       onAudio(new Blob(chunks, { type: recorder.mimeType }));
     };
 
     recorder.start();
-    timerRef.current = setTimeout(() => stop(), MAX_MS);
+    timerRef.current = setTimeout(() => stop(), RECORDING.maxMs);
     recorderRef.current = recorder;
     setRecording(true);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import type { RefObject } from "react";
+import { CHAT } from "@/lib/config";
 import { Icon } from "./Icon";
 import { RoundButton } from "./RoundButton";
 import { Waveform } from "./Waveform";
@@ -51,7 +52,7 @@ export function Composer({ input, setInput, busy, onSubmit, dictation }: Props) 
         onChange={(e) => setInput(e.target.value)}
         placeholder={dictation.transcribing ? "Transcribing…" : "Type a question…"}
         disabled={dictation.transcribing}
-        maxLength={2000}
+        maxLength={CHAT.maxMessageChars}
         autoComplete="off"
         autoFocus
         className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"

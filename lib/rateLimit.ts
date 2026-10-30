@@ -1,4 +1,6 @@
-const WINDOW_MS = 10 * 60_000;
+import { RATE_LIMIT } from "@/lib/config";
+
+const WINDOW_MS = RATE_LIMIT.windowMs;
 const hits = new Map<string, number[]>();
 
 // ponytail: in-memory per serverless instance, resets on cold start; move to Upstash/Supabase if abused

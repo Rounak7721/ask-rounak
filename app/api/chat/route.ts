@@ -3,9 +3,10 @@ import type { ChatMessage } from "@/lib/llm/types";
 import { after } from "next/server";
 import { INPUT_MODES, logQA, type InputMode } from "@/lib/log";
 import { rateLimited } from "@/lib/rateLimit";
+import { CHAT, RATE_LIMIT } from "@/lib/config";
 
 export async function POST(req: Request) {
-  const wait = rateLimited(req, "chat", 30);
+  const wait = rateLimited(req, "chat", RATE_LIMIT.chat);
   if (wait) return Response.json({ error: "Too many requests", retryAfter: wait }, { status: 429 });
   const body = await req.json().catch(() => null);
   const messages = body?.messages;
@@ -22,7 +23,9 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid messages" }, { status: 400 });
   }
   // Clip instead of rejecting, so one long reply in the history can't break every later request.
-  const history: ChatMessage[] = messages.slice(-10).map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+  const history: ChatMessage[] = messages
+    .slice(-CHAT.historyMessages)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, CHAT.maxMessageChars) }));
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId.slice(0, 64) : "unknown";
   const inputMode: InputMode | undefined = INPUT_MODES.includes(body?.inputMode) ? body.inputMode : undefined;
 

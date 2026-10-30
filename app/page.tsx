@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
 import type { InputMode } from "@/lib/log";
+import { CHAT } from "@/lib/config";
 import { chime, primeSounds } from "@/lib/sounds";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
@@ -53,6 +54,19 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantListening, live]);
 
+  // Ask before a reload or tab close would wipe the conversation. Browsers show their own
+  // "Leave site?" text; custom messages are ignored.
+  const hasConversation = messages.some((m) => m.role === "user");
+  useEffect(() => {
+    if (!hasConversation) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ""; // older Chrome and Safari need this too
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasConversation]);
+
   async function send(text: string, inputMode: InputMode) {
     const question = text.trim();
     if (!question || loading) return;
@@ -68,7 +82,7 @@ export default function Home() {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-10), sessionId: sessionIdRef.current, inputMode }),
+        body: JSON.stringify({ messages: next.slice(-CHAT.historyMessages), sessionId: sessionIdRef.current, inputMode }),
       });
       const data = await res.json();
       const reply =

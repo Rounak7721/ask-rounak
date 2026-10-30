@@ -1,3 +1,5 @@
+import { LOG_TIMEOUT_MS } from "@/lib/config";
+
 export const INPUT_MODES = ["voice", "live", "text"] as const;
 export type InputMode = (typeof INPUT_MODES)[number];
 
@@ -30,7 +32,7 @@ export async function logQA(entry: QALog): Promise<void> {
         question: entry.question,
         answer: entry.answer,
       }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(LOG_TIMEOUT_MS),
     });
     if (!res.ok) console.error(`Supabase log ${res.status}: ${await res.text()}`);
   } catch (err) {

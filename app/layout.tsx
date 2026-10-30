@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/config";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
 const description = "A voice bot that answers interview questions the way Rounak would. Ask about his work, projects and background, out loud.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://ask.rounak.co"),
+  metadataBase: new URL(SITE_URL),
   title: "Ask Rounak",
   description,
   applicationName: "Ask Rounak",

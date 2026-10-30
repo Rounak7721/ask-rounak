@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type RefObject } from "react";
-import { MAX_MS } from "@/hooks/useRecorder";
+import { RECORDING } from "@/lib/config";
 
 const STEP = 5; // px between bars
 
@@ -22,7 +22,7 @@ export function Waveform({ analyserRef }: { analyserRef: RefObject<AnalyserNode 
     let raf = 0;
 
     function frame(now: number) {
-      const secs = Math.ceil(Math.max(0, MAX_MS - (now - started)) / 1000);
+      const secs = Math.ceil(Math.max(0, RECORDING.maxMs - (now - started)) / 1000);
       countRef.current!.textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
 
       const analyser = analyserRef.current;
