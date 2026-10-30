@@ -1,4 +1,4 @@
-export const INPUT_MODES = ["voice", "live", "chip", "text"] as const;
+export const INPUT_MODES = ["voice", "live", "text"] as const;
 export type InputMode = (typeof INPUT_MODES)[number];
 
 export type QALog = {
