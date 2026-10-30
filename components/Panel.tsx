@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { ChatMessage } from "@/lib/llm/types";
-import type { InputMode } from "@/lib/log";
-import { Icon } from "./Icon";
+import { Composer, type Dictation } from "./Composer";
 import { RoundButton } from "./RoundButton";
 
 const CHIPS = ["Tell me your life story", "What's your superpower?", "What are you proudest of?", "Why 100x?"];
@@ -11,7 +10,12 @@ const CHIPS = ["Tell me your life story", "What's your superpower?", "What are y
 type Props = {
   messages: ChatMessage[];
   busy: boolean;
-  onSend: (text: string, mode: InputMode) => void;
+  input: string;
+  setInput: (text: string) => void;
+  onSubmit: () => void;
+  onChip: (text: string) => void;
+  notice: string;
+  dictation: Dictation;
   onReset: () => void;
   onClose: () => void;
 };
@@ -26,8 +30,7 @@ function download(messages: ChatMessage[]) {
 }
 
 // Transcript + typing. A full-screen sheet on phones, a docked column on desktop.
-export function Panel({ messages, busy, onSend, onReset, onClose }: Props) {
-  const [input, setInput] = useState("");
+export function Panel({ messages, busy, input, setInput, onSubmit, onChip, notice, dictation, onReset, onClose }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
   const asked = messages.some((m) => m.role === "user");
 
@@ -35,14 +38,8 @@ export function Panel({ messages, busy, onSend, onReset, onClose }: Props) {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
 
-  function submit(text: string, mode: InputMode) {
-    if (busy || !text.trim()) return;
-    onSend(text, mode);
-    setInput("");
-  }
-
   return (
-    <aside className="fixed inset-0 z-20 flex animate-sheet-in flex-col bg-bg/95 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:static md:z-auto md:w-[380px] md:border-l md:border-line md:bg-surface">
+    <aside className="fixed inset-0 z-20 flex animate-sheet-in flex-col bg-bg/95 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:static md:z-auto md:w-95 md:border-l md:border-line md:bg-surface">
       <div className="flex items-center justify-between border-b border-line pb-3">
         <h2 className="text-[15px] font-medium">Conversation</h2>
         <div className="flex gap-1.5">
@@ -72,7 +69,7 @@ export function Panel({ messages, busy, onSend, onReset, onClose }: Props) {
             <button
               key={chip}
               type="button"
-              onClick={() => submit(chip, "chip")}
+              onClick={() => onChip(chip)}
               disabled={busy}
               className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] transition hover:bg-surface-2 disabled:opacity-40"
             >
@@ -82,34 +79,8 @@ export function Panel({ messages, busy, onSend, onReset, onClose }: Props) {
         </div>
       )}
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          submit(input, "text");
-        }}
-        className="flex items-center gap-2 rounded-full border border-line bg-surface py-1.5 pr-1.5 pl-4 focus-within:border-white/25"
-      >
-        <label htmlFor="question" className="sr-only">Type a question</label>
-        <input
-          id="question"
-          name="question"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a question…"
-          maxLength={2000}
-          autoComplete="off"
-          autoFocus
-          className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          aria-label="Send"
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-fg text-bg transition disabled:opacity-30"
-        >
-          <Icon name="up" className="size-4" />
-        </button>
-      </form>
+      {notice && <p className="pb-2 text-center text-[12.5px] text-rec">{notice}</p>}
+      <Composer input={input} setInput={setInput} busy={busy} onSubmit={onSubmit} dictation={dictation} />
     </aside>
   );
 }

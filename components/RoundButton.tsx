@@ -2,8 +2,14 @@ import { Icon, type IconName } from "./Icon";
 
 const SIZES = {
   sm: { box: "size-10", icon: "size-[18px]" },
-  md: { box: "size-14", icon: "size-5" },
-  lg: { box: "size-20", icon: "size-7" },
+  md: { box: "size-12", icon: "size-5" },
+};
+
+const TONES = {
+  default: "bg-surface text-fg border-line hover:bg-surface-2",
+  solid: "bg-fg text-bg border-fg hover:bg-white",
+  danger: "bg-rec text-white border-rec",
+  ghost: "bg-transparent text-fg border-transparent hover:bg-surface-2",
 };
 
 type Props = {
@@ -11,31 +17,21 @@ type Props = {
   label: string;
   onClick: () => void;
   size?: keyof typeof SIZES;
-  active?: boolean;
+  tone?: keyof typeof TONES;
   disabled?: boolean;
-  caption?: string;
 };
 
-export function RoundButton({ icon, label, onClick, size = "sm", active, disabled, caption }: Props) {
-  const tone = active
-    ? "bg-fg text-bg border-fg"
-    : size === "lg"
-      ? "bg-[radial-gradient(circle_at_30%_25%,#2c2c33,var(--color-surface-2))] text-fg border-white/15 shadow-[0_10px_40px_rgb(255_255_255/0.06)]"
-      : "bg-surface text-fg border-line hover:bg-surface-2";
-
+export function RoundButton({ icon, label, onClick, size = "sm", tone = "default", disabled }: Props) {
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={label}
-        title={label}
-        className={`${SIZES[size].box} ${tone} grid place-items-center rounded-full border transition active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg`}
-      >
-        <Icon name={icon} className={SIZES[size].icon} />
-      </button>
-      {caption && <span className="text-[11px] text-muted">{caption}</span>}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={`${SIZES[size].box} ${TONES[tone]} grid shrink-0 place-items-center rounded-full border transition active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg`}
+    >
+      <Icon name={icon} className={SIZES[size].icon} />
+    </button>
   );
 }

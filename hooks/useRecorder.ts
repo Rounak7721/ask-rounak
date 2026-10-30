@@ -10,7 +10,8 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const analyserRef = useRef<AnalyserNode | null>(null); // read by the recording spectrum
+  const analyserRef = useRef<AnalyserNode | null>(null); // read by the dictation waveform
+  const discardRef = useRef(false);
 
   async function start() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -39,18 +40,20 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
       ctx.close();
       stream.getTracks().forEach((t) => t.stop());
       setRecording(false);
-      if (Date.now() - startedAt < MIN_MS) return;
+      if (discardRef.current || Date.now() - startedAt < MIN_MS) return;
       if (vadWorked && !heard) return onNoSpeech();
       onAudio(new Blob(chunks, { type: recorder.mimeType }));
     };
 
     recorder.start();
-    timerRef.current = setTimeout(stop, MAX_MS);
+    timerRef.current = setTimeout(() => stop(), MAX_MS);
     recorderRef.current = recorder;
     setRecording(true);
   }
 
-  function stop() {
+  // discard = cancel: stop the mic and throw the audio away.
+  function stop(discard = false) {
+    discardRef.current = discard;
     recorderRef.current?.stop();
     recorderRef.current = null;
   }

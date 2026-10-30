@@ -2,12 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 
+const ttsUrl = (text: string) => `/api/tts?text=${encodeURIComponent(text)}`;
+
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const [voiceOff, setVoiceOff] = useState(false);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const onStartRef = useRef<(() => void) | null>(null);
+  const preloadRef = useRef<{ text: string; audio: HTMLAudioElement } | null>(null);
 
   useEffect(() => {
     const synth = window.speechSynthesis;
@@ -52,13 +55,23 @@ export function useSpeech() {
     stop();
     onStartRef.current = onStart ?? null;
     if (voiceOff) return flushStart(); // text only, no /api/tts call
-    const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
+    const pre = preloadRef.current;
+    preloadRef.current = null;
+    const audio = pre?.text === text ? pre.audio : new Audio(ttsUrl(text));
     audioRef.current = audio;
     audio.onplaying = () => { flushStart(); setSpeaking(true); };
     audio.onended = () => setSpeaking(false);
     audio.play().catch(() => {
       if (audioRef.current === audio) speakBrowser(text);
     });
+  }
+
+  // Start fetching a line's audio early (e.g. the greeting while the voice model loads).
+  function preload(text: string) {
+    if (voiceOff) return;
+    const audio = new Audio(ttsUrl(text));
+    audio.preload = "auto";
+    preloadRef.current = { text, audio };
   }
 
   function stop() {
@@ -85,5 +98,5 @@ export function useSpeech() {
     setVoiceOff(!voiceOff);
   }
 
-  return { speaking, voiceOff, speak, stop, unlock, toggleVoice };
+  return { speaking, voiceOff, speak, preload, stop, unlock, toggleVoice };
 }

@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
 import type { InputMode } from "@/lib/log";
+import { chime, primeSounds } from "@/lib/sounds";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
-import { useLive } from "@/hooks/useLive";
+import { liveSupported, useLive } from "@/hooks/useLive";
 import { Brand, Disclosure, StatusPill } from "@/components/Brand";
 import { Orb, type OrbState } from "@/components/Orb";
 import { Panel } from "@/components/Panel";
-import { RecordingView } from "@/components/RecordingView";
 import { RoundButton } from "@/components/RoundButton";
 import { StartScreen } from "@/components/StartScreen";
 
@@ -18,30 +18,40 @@ function waitText(seconds: number) {
   return seconds >= 60 ? `${Math.ceil(seconds / 60)} minutes` : `${seconds} seconds`;
 }
 
-const NO_SPEECH_REPLIES = [
-  "Sorry, I didn't catch that. Could you say it again?",
-  "I couldn't hear anything there. Mind trying once more?",
-  "Hmm, that was a bit quiet. Could you repeat the question?",
-];
-
 const GREETING = "Hi, I'm an AI version of Rounak. Ask me anything about my work, projects or background. Just start talking.";
-const MIC_BLOCKED = "Microphone access was blocked. Allow it in your browser, or type your question.";
+const MIC_BLOCKED = "Microphone access was blocked. Allow it in your browser settings, or use the chat.";
+const UNSUPPORTED = "Your device doesn't support voice mode. You can still dictate or type in the chat.";
+const LOAD_FAILED = "Voice mode couldn't load on this device. You can still dictate or type in the chat.";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [voiceError, setVoiceError] = useState("");
   const [transcribing, setTranscribing] = useState(false);
-  const [greetingPending, setGreetingPending] = useState(false); // Start tapped, greeting not playing yet
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [greetingPending, setGreetingPending] = useState(false); // voice mode starting, greeting not playing yet
   const sessionIdRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
-  const autoMutedRef = useRef(false);
+  const dictatedRef = useRef(false); // the text box was filled by dictation (logged as "voice")
+  const voiceModeRef = useRef(false); // for checks after an await, where state would be stale
 
-  const { speaking, voiceOff, speak, stop: stopSpeaking, unlock, toggleVoice } = useSpeech();
-  const { recording, analyserRef, start, stop } = useRecorder(handleAudio, handleNoSpeech);
-  const { live, starting, muted, levelRef, start: startLive, toggleMute } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
+  const { speaking, voiceOff, speak, preload, stop: stopSpeaking, unlock, toggleVoice } = useSpeech();
+  const { recording, analyserRef, start: startRecording, stop: stopRecording } = useRecorder(handleDictation, () =>
+    setNotice("I couldn't hear anything. Try dictating again."),
+  );
+  const { live, starting, levelRef, start: loadVoice, setListening } = useLive(interrupt, handleLiveSpeech);
+
+  // The VAD listens only in voice mode, unmuted, and not while dictating.
+  const wantListening = voiceMode && !micMuted && !recording;
+  useEffect(() => {
+    setListening(wantListening);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantListening, live]);
 
   async function send(text: string, inputMode: InputMode) {
     const question = text.trim();
@@ -78,23 +88,51 @@ export default function Home() {
     }
   }
 
-  async function goLive(greet: boolean) {
+  function sendTyped() {
+    if (loading || !input.trim()) return;
+    send(input, dictatedRef.current ? "voice" : "text");
+    setInput("");
+    dictatedRef.current = false;
+  }
+
+  async function startVoice(greet: boolean) {
     setNotice("");
-    try {
-      if ((await startLive()) && greet) {
-        speak(GREETING, () => {
-          setGreetingPending(false);
-          setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]);
-        });
-      } else setGreetingPending(false);
-    } catch (err) {
-      setGreetingPending(false);
-      setNotice(
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? MIC_BLOCKED
-          : "Live voice couldn't load. Tap to talk, or type instead.",
-      );
+    setVoiceError("");
+    if (!liveSupported()) return setVoiceError(UNSUPPORTED);
+    voiceModeRef.current = true;
+    setVoiceMode(true);
+    setMicMuted(false);
+    if (greet) {
+      setGreetingPending(true);
+      preload(GREETING); // fetch the greeting audio while the model loads
     }
+    try {
+      await loadVoice();
+      if (!voiceModeRef.current) return; // ended while the model was loading
+      chime("on");
+      if (!greet) return;
+      setTimeout(
+        () =>
+          speak(GREETING, () => {
+            setGreetingPending(false);
+            setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]);
+          }),
+        350,
+      );
+    } catch (err) {
+      voiceModeRef.current = false;
+      setVoiceMode(false);
+      setGreetingPending(false);
+      setVoiceError(err instanceof DOMException && err.name === "NotAllowedError" ? MIC_BLOCKED : LOAD_FAILED);
+    }
+  }
+
+  function endVoice() {
+    interrupt();
+    voiceModeRef.current = false;
+    setVoiceMode(false);
+    setGreetingPending(false);
+    chime("off");
   }
 
   function interrupt() {
@@ -109,12 +147,8 @@ export default function Home() {
     sessionIdRef.current = crypto.randomUUID();
   }
 
-  function handleNoSpeech() {
-    const line = NO_SPEECH_REPLIES[Math.floor(Math.random() * NO_SPEECH_REPLIES.length)];
-    speak(line, () => setMessages((prev) => [...prev, { role: "assistant", content: line }]));
-  }
-
-  async function handleAudio(audio: Blob, inputMode: InputMode = "voice") {
+  // Returns the transcript, or null after showing why it failed.
+  async function transcribe(audio: Blob): Promise<string | null> {
     setTranscribing(true);
     setNotice("");
     try {
@@ -126,45 +160,39 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) {
         setNotice(res.status === 429 ? `Too many questions too fast. Try again in ${waitText(data.retryAfter)}.` : "Sorry, something went wrong. Please try again.");
-        return;
+        return null;
       }
-      if (!/[a-z]/i.test(data.text ?? "")) return inputMode === "live" ? undefined : handleNoSpeech();
-      send(data.text, inputMode);
+      return /[a-z]/i.test(data.text ?? "") ? data.text.trim() : null;
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setNotice("Couldn't reach the server. Please try again.");
+      if (!(err instanceof DOMException && err.name === "AbortError")) setNotice("Couldn't reach the server. Please try again.");
+      return null;
     } finally {
       setTranscribing(false);
     }
   }
 
-  // Tap to talk pauses Live while recording, and resumes it once recording ends.
-  async function toggleMic() {
-    if (recording) return stop();
+  async function handleLiveSpeech(wav: Blob) {
+    const text = await transcribe(wav);
+    if (text) send(text, "live");
+  }
+
+  async function handleDictation(audio: Blob) {
+    const text = await transcribe(audio);
+    if (!text) return;
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+    dictatedRef.current = true;
+  }
+
+  async function startDictation() {
+    setPanelOpen(true);
     stopSpeaking();
     setNotice("");
-    if (live && !muted) {
-      await toggleMute();
-      autoMutedRef.current = true;
-    }
     try {
-      await start();
+      await startRecording();
     } catch {
-      setNotice(MIC_BLOCKED);
-      resumeLive();
+      setNotice("Microphone access was blocked. Allow it in your browser settings, or type instead.");
     }
   }
-
-  function resumeLive() {
-    if (!autoMutedRef.current) return;
-    autoMutedRef.current = false;
-    toggleMute();
-  }
-
-  useEffect(() => {
-    if (!recording) resumeLive();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recording]);
 
   if (!started) {
     return (
@@ -172,46 +200,50 @@ export default function Home() {
         onStart={() => {
           sessionIdRef.current = crypto.randomUUID();
           unlock();
+          primeSounds();
           setStarted(true);
-          setGreetingPending(true);
-          goLive(true);
+          startVoice(true);
         }}
       />
     );
   }
 
   const thinking = loading || transcribing;
-  const preparing = starting || greetingPending;
-  const voiceOn = live && !muted;
+  const preparing = (starting || greetingPending) && !speaking;
+  const listening = voiceMode && !micMuted;
   const lastOf = (role: ChatMessage["role"]) => messages.findLast((m) => m.role === role)?.content ?? "";
 
-  const orbState: OrbState = preparing ? "idle" : thinking ? "thinking" : speaking ? "speaking" : voiceOn ? "listening" : "muted";
+  const orbState: OrbState = preparing ? "idle" : thinking ? "thinking" : speaking ? "speaking" : listening ? "listening" : "muted";
 
-  const [pill, tone]: [string, "live" | "rec" | "off"] = preparing && !speaking
+  const [pill, tone]: [string, "live" | "rec" | "off"] = preparing
     ? ["Preparing", "off"]
     : recording
-      ? ["Recording", "rec"]
+      ? ["Dictating", "rec"]
       : thinking
         ? ["Thinking", "live"]
         : speaking
           ? ["Speaking", "live"]
-          : voiceOn
+          : listening
             ? ["Live", "live"]
-            : ["Voice off", "off"];
+            : voiceMode
+              ? ["Muted", "off"]
+              : ["Voice off", "off"];
 
-  const [title, detail] = preparing && !speaking
-    ? ["Preparing voice…", "Loading the speech model. You can type meanwhile."]
+  const [title, detail] = preparing
+    ? ["Preparing voice…", "Loading the speech model. You can open the chat meanwhile."]
     : recording
-      ? ["Tap stop when you're done", live ? "Live is paused while you record." : ""]
+      ? ["Dictating…", "Stop when you're done, then send from the chat."]
       : transcribing
         ? ["Transcribing…", ""]
         : loading
           ? ["Thinking…", lastOf("user")]
           : speaking
             ? ["", lastOf("assistant")]
-            : voiceOn
+            : listening
               ? ["I'm listening", "Just start talking. Interrupt me any time."]
-              : ["Voice mode is off", "The mic is off. Turn voice on, tap to talk, or type."];
+              : voiceMode
+                ? ["Mic is off", "Nothing is sent while muted. Unmute to keep talking."]
+                : ["Voice mode is off", "Turn it on to talk, or dictate and type in the chat."];
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -220,9 +252,9 @@ export default function Home() {
           <Brand />
           <RoundButton
             icon={voiceOff ? "volumeOff" : "volume"}
-            label={voiceOff ? "Turn voice on" : "Turn voice off"}
+            label={voiceOff ? "Turn spoken replies on" : "Turn spoken replies off"}
             onClick={toggleVoice}
-            active={voiceOff}
+            tone={voiceOff ? "solid" : "default"}
           />
         </header>
 
@@ -231,54 +263,81 @@ export default function Home() {
         </div>
 
         <div className="flex w-full flex-1 items-center justify-center">
-          {recording ? (
-            <RecordingView analyserRef={analyserRef} onStop={stop} />
-          ) : (
-            <button
-              type="button"
-              onClick={interrupt}
-              disabled={!thinking && !speaking}
-              aria-label="Interrupt"
-              className="rounded-full disabled:cursor-default focus-visible:outline-2 focus-visible:outline-fg"
-            >
-              <Orb state={orbState} levelRef={levelRef} className="size-[min(78vw,46dvh,380px)]" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={interrupt}
+            disabled={!thinking && !speaking}
+            aria-label="Interrupt"
+            className="rounded-full disabled:cursor-default focus-visible:outline-2 focus-visible:outline-fg"
+          >
+            <Orb state={orbState} levelRef={levelRef} className="size-[min(78vw,46dvh,380px)]" />
+          </button>
         </div>
 
         <div className="flex min-h-24 w-full max-w-md flex-col items-center gap-1.5 text-center" aria-live="polite">
-          {title && <p className="text-[15px] font-medium">{title}</p>}
-          {notice ? (
-            <p className="text-[13px] leading-relaxed text-rec">{notice}</p>
-          ) : speaking ? (
-            <p className="line-clamp-3 font-display text-lg leading-snug text-fg/85">{detail}</p>
+          {voiceError ? (
+            <>
+              <p className="text-[14px] leading-relaxed text-muted">{voiceError}</p>
+              <button
+                type="button"
+                onClick={() => setPanelOpen(true)}
+                className="mt-1 rounded-full bg-fg px-4 py-2 text-[13px] font-medium text-bg transition hover:bg-white"
+              >
+                Open chat
+              </button>
+            </>
           ) : (
-            detail && <p className="line-clamp-2 text-[13px] leading-relaxed text-muted">{detail}</p>
+            <>
+              {title && <p className="text-[15px] font-medium">{title}</p>}
+              {notice && !panelOpen ? (
+                <p className="text-[13px] leading-relaxed text-rec">{notice}</p>
+              ) : speaking ? (
+                <p className="line-clamp-3 font-display text-lg leading-snug text-fg/85">{detail}</p>
+              ) : (
+                detail && <p className="line-clamp-2 text-[13px] leading-relaxed text-muted">{detail}</p>
+              )}
+            </>
           )}
         </div>
 
-        {!recording && (
-          <nav className="mt-4 mb-4 flex items-end justify-center gap-10" aria-label="Controls">
-            <RoundButton icon="mic" label="Tap to talk" caption="Tap to talk" onClick={toggleMic} disabled={thinking || starting} size="md" />
-            {/* Voice mode pauses the mic (model stays loaded, so turning it back on is instant). */}
-            <RoundButton
-              icon="voice"
-              label={voiceOn ? "Turn voice mode off" : "Turn voice mode on"}
-              caption={voiceOn ? "Voice on" : "Voice off"}
-              onClick={() => (live ? toggleMute() : goLive(false))}
-              active={voiceOn}
-              disabled={preparing}
-              size="lg"
-            />
-            <RoundButton icon="chat" label="Type a question" caption="Type" onClick={() => setPanelOpen(!panelOpen)} active={panelOpen} size="md" />
-          </nav>
-        )}
+        <nav className="my-4 flex items-center gap-1.5 rounded-full border border-line bg-surface p-1.5" aria-label="Controls">
+          {voiceMode ? (
+            <>
+              <RoundButton
+                icon={micMuted ? "micOff" : "mic"}
+                label={micMuted ? "Turn on microphone" : "Turn off microphone"}
+                onClick={() => setMicMuted(!micMuted)}
+                tone={micMuted ? "danger" : "ghost"}
+                disabled={preparing}
+                size="md"
+              />
+              <RoundButton icon="x" label="End voice mode" onClick={endVoice} tone="solid" size="md" />
+            </>
+          ) : (
+            <>
+              <RoundButton icon="mic" label="Dictate" onClick={startDictation} tone="ghost" disabled={recording || transcribing} size="md" />
+              <RoundButton icon="chat" label="Open chat" onClick={() => setPanelOpen(!panelOpen)} tone="ghost" size="md" />
+              <RoundButton icon="voice" label="Start voice mode" onClick={() => startVoice(false)} tone="solid" disabled={starting} size="md" />
+            </>
+          )}
+        </nav>
 
-        <Disclosure extra={voiceOn ? "The mic is on while voice mode is on" : undefined} />
+        <Disclosure extra={listening ? "The mic is on while voice mode is on" : undefined} />
       </main>
 
       {panelOpen && (
-        <Panel messages={messages} busy={loading} onSend={send} onReset={startOver} onClose={() => setPanelOpen(false)} />
+        <Panel
+          messages={messages}
+          busy={loading}
+          input={input}
+          setInput={setInput}
+          onSubmit={sendTyped}
+          onChip={(chip) => send(chip, "chip")}
+          notice={notice}
+          dictation={{ recording, transcribing, analyserRef, start: startDictation, stop: stopRecording }}
+          onReset={startOver}
+          onClose={() => setPanelOpen(false)}
+        />
       )}
     </div>
   );

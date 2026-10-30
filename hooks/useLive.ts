@@ -5,17 +5,21 @@ import type { MicVAD } from "@ricky0123/vad-web";
 
 const CDN = "https://cdn.jsdelivr.net/npm/";
 
+// What the VAD needs: mic access, Web Audio and WebAssembly (for the speech model).
+export function liveSupported() {
+  return !!navigator.mediaDevices?.getUserMedia && "AudioContext" in window && typeof WebAssembly === "object";
+}
+
 export function useLive(onSpeechStart: () => void, onSpeechEnd: (wav: Blob) => void) {
-  const [live, setLive] = useState(false);
+  const [live, setLive] = useState(false); // model loaded
   const [starting, setStarting] = useState(false);
-  const [muted, setMuted] = useState(false);
   const startingRef = useRef(false);
   const vadRef = useRef<MicVAD | null>(null);
   const levelRef = useRef(0); // mic loudness 0..1, read by the orb every frame
   const handlersRef = useRef({ onSpeechStart, onSpeechEnd });
   handlersRef.current = { onSpeechStart, onSpeechEnd };
 
-  // Returns true once listening, false if a start was already in progress.
+  // Loads the model and starts listening. Returns false if it was already loaded or loading.
   async function start() {
     if (startingRef.current || vadRef.current) return false;
     startingRef.current = true;
@@ -42,20 +46,14 @@ export function useLive(onSpeechStart: () => void, onSpeechEnd: (wav: Blob) => v
     }
   }
 
-  async function stop() {
-    await vadRef.current?.destroy();
-    vadRef.current = null;
-    setLive(false);
-    setMuted(false);
-  }
-
   // pause() stops the mic tracks and drops any half-spoken audio, so nothing reaches STT.
-  async function toggleMute() {
-    if (!vadRef.current) return;
-    await (muted ? vadRef.current.start() : vadRef.current.pause());
+  // start() turns the mic back on without reloading the model. Both are no-ops if already in that state.
+  async function setListening(on: boolean) {
+    const vad = vadRef.current;
+    if (!vad) return;
+    await (on ? vad.start() : vad.pause());
     levelRef.current = 0;
-    setMuted(!muted);
   }
 
-  return { live, starting, muted, levelRef, start, stop, toggleMute };
+  return { live, starting, levelRef, start, setListening };
 }
