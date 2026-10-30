@@ -293,6 +293,7 @@ export default function Home() {
                 disabled={preparing}
                 size="md"
               />
+              <RoundButton icon="chat" label="Open chat" onClick={() => setPanelOpen(!panelOpen)} tone="ghost" size="md" />
               <RoundButton icon="x" label="End voice mode" onClick={endVoice} tone="solid" size="md" />
             </>
           ) : (

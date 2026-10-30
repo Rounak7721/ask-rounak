@@ -30,9 +30,20 @@ function download(messages: ChatMessage[]) {
 export function Panel({ messages, busy, input, setInput, onSubmit, notice, dictation, onReset, onClose }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Escape stops dictation (keeping the audio), otherwise closes the panel.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (dictation.recording) dictation.stop();
+      else onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dictation, onClose]);
+
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, busy]);
 
   return (
     <aside className="fixed inset-0 z-20 flex animate-sheet-in flex-col bg-bg/95 px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:static md:z-auto md:w-95 md:border-l md:border-line md:bg-surface">
@@ -57,6 +68,13 @@ export function Panel({ messages, busy, input, setInput, onSubmit, notice, dicta
             {m.content}
           </p>
         ))}
+        {busy && (
+          <span className="flex gap-1 self-start rounded-[18px] rounded-bl-md bg-surface-2 px-4 py-3.5" role="status" aria-label="Thinking">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="size-1.5 animate-pulse rounded-full bg-muted" style={{ animationDelay: `${i * 150}ms` }} />
+            ))}
+          </span>
+        )}
       </div>
 
       {notice && <p className="pb-2 text-center text-[12.5px] text-rec">{notice}</p>}

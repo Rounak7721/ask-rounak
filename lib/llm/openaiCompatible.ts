@@ -20,6 +20,8 @@ export async function chatCompletion(
       messages: [{ role: "system", content: system }, ...messages],
       reasoning_effort: "low",
       temperature: 0.4,
+      // Safety net against runaway replies (counts reasoning tokens too); normal replies use < 300.
+      max_completion_tokens: 1200,
     }),
     signal: AbortSignal.timeout(15_000),
   });

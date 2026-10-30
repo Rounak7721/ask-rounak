@@ -4,9 +4,16 @@ import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
+const description = "A voice bot that answers interview questions the way Rounak would. Ask about his work, projects and background, out loud.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://ask.rounak.co"),
   title: "Ask Rounak",
-  description: "Talk to an AI version of Rounak about his work, projects and background.",
+  description,
+  applicationName: "Ask Rounak",
+  authors: [{ name: "Rounak Sonavane" }],
+  openGraph: { title: "Ask Rounak", description, url: "/", siteName: "Ask Rounak", type: "website" },
+  twitter: { card: "summary_large_image", title: "Ask Rounak", description },
 };
 
 export const viewport: Viewport = {
