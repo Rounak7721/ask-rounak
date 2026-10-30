@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
+  const [voiceOff, setVoiceOff] = useState(false);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const onStartRef = useRef<(() => void) | null>(null);
@@ -50,6 +51,7 @@ export function useSpeech() {
   function speak(text: string, onStart?: () => void) {
     stop();
     onStartRef.current = onStart ?? null;
+    if (voiceOff) return flushStart(); // text only, no /api/tts call
     const audio = new Audio(`/api/tts?text=${encodeURIComponent(text)}`);
     audioRef.current = audio;
     audio.onplaying = () => { flushStart(); setSpeaking(true); };
@@ -78,5 +80,10 @@ export function useSpeech() {
     window.speechSynthesis?.speak(u);
   }
 
-  return { speaking, speak, stop, unlock };
+  function toggleVoice() {
+    if (!voiceOff) stop();
+    setVoiceOff(!voiceOff);
+  }
+
+  return { speaking, voiceOff, speak, stop, unlock, toggleVoice };
 }

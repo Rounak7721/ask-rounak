@@ -18,6 +18,8 @@ const NO_SPEECH_REPLIES = [
   "Hmm, that was a bit quiet. Could you repeat the question?",
 ];
 
+const GREETING = "Hi, I'm an AI version of Rounak. Ask me anything about my work, projects or background. Just start talking.";
+
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -26,7 +28,7 @@ export default function Home() {
   const sessionIdRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
 
-  const { speaking, speak, stop: stopSpeaking, unlock } = useSpeech();
+  const { speaking, voiceOff, speak, stop: stopSpeaking, unlock, toggleVoice } = useSpeech();
 
 
   async function send(text: string, inputMode: InputMode) {
@@ -68,7 +70,22 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const { recording, start, stop } = useRecorder(handleAudio, handleNoSpeech);
-  const { live, start: startLive, stop: stopLive } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
+  const { live, starting, muted, start: startLive, stop: stopLive, toggleMute } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
+
+  async function goLive(greet: boolean) {
+    setNotice("");
+    try {
+      if (await startLive() && greet) {
+        speak(GREETING, () => setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]));
+      }
+    } catch (err) {
+      setNotice(
+        err instanceof DOMException && err.name === "NotAllowedError"
+          ? "Microphone access was blocked. Allow it in your browser, or type your question."
+          : "Live voice couldn't load. Tap 🎤 to ask, or type below.",
+      );
+    }
+  }
 
   function interrupt() {
     abortRef.current?.abort();
@@ -140,6 +157,7 @@ export default function Home() {
             sessionIdRef.current = crypto.randomUUID();
             unlock();
             setStarted(true);
+            goLive(true);
           }}
           className="rounded-full bg-indigo-600 px-8 py-3 text-lg text-white"
         >
@@ -150,7 +168,9 @@ export default function Home() {
     );
   }
 
-  const status = recording
+  const status = starting
+    ? "Preparing voice…"
+    : recording
     ? "Listening… tap Stop when you're done."
     : transcribing
       ? "Transcribing…"
@@ -158,7 +178,11 @@ export default function Home() {
         ? "Thinking…"
         : speaking
           ? "Speaking…"
-          : "Tap 🎤 to ask, or type below.";
+          : live && muted
+            ? "Live is muted. Unmute, tap 🎤 or type below."
+            : live
+            ? "Listening… just start talking."
+            : "Tap 🎤 to ask, or type below.";
 
 
   return (
@@ -179,11 +203,16 @@ export default function Home() {
 
       <div className="flex items-center justify-between text-sm">
         <p className={notice ? "text-red-600" : "text-zinc-500"}>{notice || status}</p>
-        {speaking && (
-          <button type="button" onClick={stopSpeaking} className="text-indigo-600">
-            Stop speaking
+        <div className="flex gap-3">
+          {speaking && (
+            <button type="button" onClick={stopSpeaking} className="text-indigo-600">
+              Stop speaking
+            </button>
+          )}
+          <button type="button" onClick={toggleVoice} aria-label={voiceOff ? "Turn voice on" : "Turn voice off"}>
+            {voiceOff ? "🔇" : "🔊"}
           </button>
-        )}
+        </div>
       </div>
 
       <form
@@ -195,16 +224,23 @@ export default function Home() {
       >
         <button
           type="button"
-          onClick={() => (live ? stopLive() : startLive().catch(() => setNotice("Microphone access was blocked. Allow it in your browser, or type your question.")))}
-          className="rounded-full bg-zinc-800 px-4 py-2 text-white"
+          onClick={() => (live ? stopLive() : goLive(false))}
+          disabled={starting}
+          className="rounded-full bg-zinc-800 px-4 py-2 text-white disabled:opacity-50"
         >
           {live ? "Live ●" : "Live"}
         </button>
 
+        {live && (
+          <button type="button" onClick={toggleMute} className="rounded-full bg-zinc-800 px-4 py-2 text-white">
+            {muted ? "Unmute" : "Mute"}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={toggleMic}
-                    disabled={loading || transcribing || live}
+          disabled={loading || transcribing || (live && !muted) || starting}
 
           className={`rounded-full px-4 py-2 text-white disabled:opacity-50 ${recording ? "bg-red-600" : "bg-zinc-800"}`}
         >
