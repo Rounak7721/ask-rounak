@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { MicVAD } from "@ricky0123/vad-web";
-import { ENDPOINTS } from "@/lib/config";
+import { ENDPOINTS, VAD } from "@/lib/config";
 
 // What the VAD needs: mic access, Web Audio and WebAssembly (for the speech model).
 export function liveSupported() {
@@ -29,6 +29,7 @@ export function useLive(onSpeechStart: () => void, onSpeechEnd: (wav: Blob) => v
       vadRef.current = await MicVAD.new({
         baseAssetPath: ENDPOINTS.vadAssets,
         onnxWASMBasePath: ENDPOINTS.onnxWasm,
+        ...VAD,
         onSpeechRealStart: () => handlersRef.current.onSpeechStart(),
         onSpeechEnd: (audio) =>
           handlersRef.current.onSpeechEnd(new Blob([utils.encodeWAV(audio)], { type: "audio/wav" })),

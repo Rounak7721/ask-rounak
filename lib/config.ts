@@ -44,6 +44,17 @@ export const STT = {
   prompt: "Interview questions for Rounak about ClauseGuard, MindDesk, IRIS, 100x, Kolhapur, Goa, AI agents.",
   maxBytes: 4 * 1024 * 1024,
   timeoutMs: 15_000,
+  // Whisper invents whole sentences from coughs and noise. Measured average log-probability:
+  // noise ≈ -1.4, real speech -0.2 to -0.5 (even short or noisy). Below this, the transcript is dropped.
+  minAvgLogprob: -1.0,
+};
+
+// Voice activity detection (voice mode). Stricter than the library defaults (0.3 / 0.25 / 400 ms),
+// so coughs and bumps don't count as speech or cut the bot off mid-reply.
+export const VAD = {
+  positiveSpeechThreshold: 0.5, // speech probability a frame needs to count as speech
+  negativeSpeechThreshold: 0.35, // below this, speech has stopped (Silero suggests 0.15 under positive)
+  minSpeechMs: 600, // shorter bursts are ignored and don't interrupt
 };
 
 export const TTS = {
