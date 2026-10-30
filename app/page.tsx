@@ -8,7 +8,7 @@ import { chime, primeSounds } from "@/lib/sounds";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
 import { liveSupported, useLive } from "@/hooks/useLive";
-import { Brand, Disclosure, StatusPill } from "@/components/Brand";
+import { Brand, Disclosure } from "@/components/Brand";
 import { Orb, type OrbState } from "@/components/Orb";
 import { Panel } from "@/components/Panel";
 import { RoundButton } from "@/components/RoundButton";
@@ -215,20 +215,6 @@ export default function Home() {
 
   const orbState: OrbState = preparing ? "idle" : thinking ? "thinking" : speaking ? "speaking" : listening ? "listening" : "muted";
 
-  const [pill, tone]: [string, "live" | "rec" | "off"] = preparing
-    ? ["Preparing", "off"]
-    : recording
-      ? ["Dictating", "rec"]
-      : thinking
-        ? ["Thinking", "live"]
-        : speaking
-          ? ["Speaking", "live"]
-          : listening
-            ? ["Live", "live"]
-            : voiceMode
-              ? ["Muted", "off"]
-              : ["Voice off", "off"];
-
   const [title, detail] = preparing
     ? ["Preparing voice…", "Loading the speech model. You can open the chat meanwhile."]
     : recording
@@ -257,10 +243,6 @@ export default function Home() {
             tone={voiceOff ? "solid" : "default"}
           />
         </header>
-
-        <div className="mt-3">
-          <StatusPill label={pill} tone={tone} />
-        </div>
 
         <div className="flex w-full flex-1 items-center justify-center">
           <button
@@ -292,7 +274,7 @@ export default function Home() {
               {notice && !panelOpen ? (
                 <p className="text-[13px] leading-relaxed text-rec">{notice}</p>
               ) : speaking ? (
-                <p className="line-clamp-3 font-display text-lg leading-snug text-fg/85">{detail}</p>
+                <p className="line-clamp-3 text-lg leading-snug font-light text-fg/85">{detail}</p>
               ) : (
                 detail && <p className="line-clamp-2 text-[13px] leading-relaxed text-muted">{detail}</p>
               )}

@@ -1,10 +1,9 @@
 @import "tailwindcss";
 
-/* All colours, fonts and motion live here. Components use them as Tailwind classes (bg-surface, text-muted, font-display…). */
-/* inline: next/font sets these variables on <body>, so utilities must reference them directly */
+/* All colours, fonts and motion live here. Components use them as Tailwind classes (bg-surface, text-muted…). */
+/* inline: next/font sets this variable on <body>, so utilities must reference it directly */
 @theme inline {
   --font-sans: var(--font-geist), system-ui, -apple-system, sans-serif;
-  --font-display: var(--font-instrument), Georgia, serif;
 }
 
 @theme {
