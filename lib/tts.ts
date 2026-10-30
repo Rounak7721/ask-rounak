@@ -14,6 +14,9 @@ export async function synthesize(text: string): Promise<ReadableStream<Uint8Arra
   const model = process.env.DEEPGRAM_TTS_MODEL;
   if (!key || !model) throw new Error("Deepgram not configured");
 
+  // Time out only while waiting for Deepgram to answer; long replies take longer than that to stream.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
   const res = await fetch(
     `https://api.deepgram.com/v1/speak?model=${model}&speed=1.0`,
     {
@@ -23,9 +26,9 @@ export async function synthesize(text: string): Promise<ReadableStream<Uint8Arra
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ text: applyPronunciations(text) }),
-      signal: AbortSignal.timeout(15000),
+      signal: controller.signal,
     },
-  );
+  ).finally(() => clearTimeout(timer));
 
   const warnings = res.headers.get("dg-warnings");
   if (warnings) console.warn("Deepgram warnings:", warnings);
