@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 
-const MAX_MS = 60_000;
+export const MAX_MS = 60_000;
 const MIN_MS = 1_000;
 const SPEECH_RMS = 0.02;
 
@@ -10,6 +10,7 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const analyserRef = useRef<AnalyserNode | null>(null); // read by the recording spectrum
 
   async function start() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -19,6 +20,7 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
     const ctx = new AudioContext();
     const analyser = ctx.createAnalyser();
     ctx.createMediaStreamSource(stream).connect(analyser);
+    analyserRef.current = analyser;
     const buf = new Float32Array(analyser.fftSize);
     let heard = false;
     const poll = setInterval(() => {
@@ -32,6 +34,7 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
     recorder.onstop = () => {
       clearTimeout(timerRef.current);
       clearInterval(poll);
+      analyserRef.current = null;
       const vadWorked = ctx.state === "running";
       ctx.close();
       stream.getTracks().forEach((t) => t.stop());
@@ -52,5 +55,5 @@ export function useRecorder(onAudio: (audio: Blob) => void, onNoSpeech: () => vo
     recorderRef.current = null;
   }
 
-  return { recording, start, stop };
+  return { recording, analyserRef, start, stop };
 }

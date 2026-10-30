@@ -1,12 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ChatMessage } from "@/lib/llm/types";
+import type { InputMode } from "@/lib/log";
 import { useRecorder } from "@/hooks/useRecorder";
 import { useSpeech } from "@/hooks/useSpeech";
-import type { InputMode } from "@/lib/log";
 import { useLive } from "@/hooks/useLive";
+import { Brand, Disclosure, StatusPill } from "@/components/Brand";
+import { Orb, type OrbState } from "@/components/Orb";
+import { Panel } from "@/components/Panel";
+import { RecordingView } from "@/components/RecordingView";
+import { RoundButton } from "@/components/RoundButton";
+import { StartScreen } from "@/components/StartScreen";
 
 function waitText(seconds: number) {
   return seconds >= 60 ? `${Math.ceil(seconds / 60)} minutes` : `${seconds} seconds`;
@@ -19,17 +25,22 @@ const NO_SPEECH_REPLIES = [
 ];
 
 const GREETING = "Hi, I'm an AI version of Rounak. Ask me anything about my work, projects or background. Just start talking.";
+const MIC_BLOCKED = "Microphone access was blocked. Allow it in your browser, or type your question.";
 
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
   const sessionIdRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
+  const autoMutedRef = useRef(false);
 
   const { speaking, voiceOff, speak, stop: stopSpeaking, unlock, toggleVoice } = useSpeech();
-
+  const { recording, analyserRef, start, stop } = useRecorder(handleAudio, handleNoSpeech);
+  const { live, starting, muted, levelRef, start: startLive, toggleMute } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
 
   async function send(text: string, inputMode: InputMode) {
     const question = text.trim();
@@ -37,7 +48,6 @@ export default function Home() {
 
     const next: ChatMessage[] = [...messages, { role: "user", content: question }];
     setMessages(next);
-    setInput("");
     setLoading(true);
 
     const controller = new AbortController();
@@ -67,22 +77,17 @@ export default function Home() {
     }
   }
 
-  const [notice, setNotice] = useState("");
-  const [transcribing, setTranscribing] = useState(false);
-  const { recording, start, stop } = useRecorder(handleAudio, handleNoSpeech);
-  const { live, starting, muted, start: startLive, stop: stopLive, toggleMute } = useLive(interrupt, (wav) => handleAudio(wav, "live"));
-
   async function goLive(greet: boolean) {
     setNotice("");
     try {
-      if (await startLive() && greet) {
+      if ((await startLive()) && greet) {
         speak(GREETING, () => setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]));
       }
     } catch (err) {
       setNotice(
         err instanceof DOMException && err.name === "NotAllowedError"
-          ? "Microphone access was blocked. Allow it in your browser, or type your question."
-          : "Live voice couldn't load. Tap 🎤 to ask, or type below.",
+          ? MIC_BLOCKED
+          : "Live voice couldn't load. Tap to talk, or type instead.",
       );
     }
   }
@@ -93,6 +98,11 @@ export default function Home() {
     setLoading(false);
   }
 
+  function startOver() {
+    interrupt();
+    setMessages([]);
+    sessionIdRef.current = crypto.randomUUID();
+  }
 
   function handleNoSpeech() {
     const line = NO_SPEECH_REPLIES[Math.floor(Math.random() * NO_SPEECH_REPLIES.length)];
@@ -100,7 +110,6 @@ export default function Home() {
   }
 
   async function handleAudio(audio: Blob, inputMode: InputMode = "voice") {
-
     setTranscribing(true);
     setNotice("");
     try {
@@ -116,7 +125,6 @@ export default function Home() {
       }
       if (!/[a-z]/i.test(data.text ?? "")) return inputMode === "live" ? undefined : handleNoSpeech();
       send(data.text, inputMode);
-
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       setNotice("Couldn't reach the server. Please try again.");
@@ -125,139 +133,151 @@ export default function Home() {
     }
   }
 
+  // Tap to talk pauses Live while recording, and resumes it once recording ends.
   async function toggleMic() {
-    if (recording) {
-      stop();
-      return;
-    }
-
+    if (recording) return stop();
     stopSpeaking();
-
     setNotice("");
+    if (live && !muted) {
+      await toggleMute();
+      autoMutedRef.current = true;
+    }
     try {
       await start();
     } catch {
-      setNotice("Microphone access was blocked. Allow it in your browser, or type your question.");
+      setNotice(MIC_BLOCKED);
+      resumeLive();
     }
   }
 
-  const footer = (
-    <p className="text-center text-xs text-zinc-500">
-      This is an AI version of Rounak. Questions and answers are logged to improve it. No IP addresses are stored.
-    </p>
-  );
+  function resumeLive() {
+    if (!autoMutedRef.current) return;
+    autoMutedRef.current = false;
+    toggleMute();
+  }
+
+  useEffect(() => {
+    if (!recording) resumeLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
 
   if (!started) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6 text-center">
-        <h1 className="text-3xl font-semibold">Ask Rounak</h1>
-        <p className="text-zinc-500">Ask me any questions by voice or text.</p>
-        <button
-          onClick={() => {
-            sessionIdRef.current = crypto.randomUUID();
-            unlock();
-            setStarted(true);
-            goLive(true);
-          }}
-          className="rounded-full bg-indigo-600 px-8 py-3 text-lg text-white"
-        >
-          Start
-        </button>
-        {footer}
-      </main>
+      <StartScreen
+        onStart={() => {
+          sessionIdRef.current = crypto.randomUUID();
+          unlock();
+          setStarted(true);
+          goLive(true);
+        }}
+      />
     );
   }
 
-  const status = starting
-    ? "Preparing voice…"
-    : recording
-    ? "Listening… tap Stop when you're done."
-    : transcribing
-      ? "Transcribing…"
-      : loading
-        ? "Thinking…"
-        : speaking
-          ? "Speaking…"
-          : live && muted
-            ? "Live is muted. Unmute, tap 🎤 or type below."
-            : live
-            ? "Listening… just start talking."
-            : "Tap 🎤 to ask, or type below.";
+  const thinking = loading || transcribing;
+  const lastOf = (role: ChatMessage["role"]) => messages.findLast((m) => m.role === role)?.content ?? "";
 
+  const orbState: OrbState = thinking ? "thinking" : speaking ? "speaking" : live && muted ? "muted" : live ? "listening" : "idle";
+
+  const [pill, tone]: [string, "live" | "rec" | "off"] = starting
+    ? ["Preparing", "off"]
+    : recording
+      ? ["Recording", "rec"]
+      : thinking
+        ? ["Thinking", "live"]
+        : speaking
+          ? ["Speaking", "live"]
+          : live && muted
+            ? ["Muted", "off"]
+            : live
+              ? ["Live", "live"]
+              : ["Live off", "off"];
+
+  const [title, detail] = starting
+    ? ["Preparing voice…", "Loading the speech model. You can type meanwhile."]
+    : recording
+      ? ["Tap stop when you're done", live ? "Live is paused while you record." : ""]
+      : transcribing
+        ? ["Transcribing…", ""]
+        : loading
+          ? ["Thinking…", lastOf("user")]
+          : speaking
+            ? ["", lastOf("assistant")]
+            : live && muted
+              ? ["Mic is off", "Nothing is sent while muted. Unmute, tap to talk, or type."]
+              : live
+                ? ["I'm listening", "Just start talking. Interrupt me any time."]
+                : ["Tap to talk or type", "Live voice is off."];
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-4 p-6">
-      <h1 className="text-2xl font-semibold">Ask Rounak</h1>
+    <div className="flex h-dvh overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col items-center px-5 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <header className="flex w-full max-w-xl items-center justify-between">
+          <Brand />
+          <RoundButton
+            icon={voiceOff ? "volumeOff" : "volume"}
+            label={voiceOff ? "Turn voice on" : "Turn voice off"}
+            onClick={toggleVoice}
+            active={voiceOff}
+          />
+        </header>
 
-      <ul className="flex flex-1 flex-col gap-3">
-        {messages.map((m, i) => (
-          <li
-            key={i}
-            className={`max-w-[85%] rounded-2xl px-4 py-2 ${m.role === "user" ? "self-end bg-indigo-600 text-white" : "self-start bg-zinc-100 text-zinc-900"
-              }`}
-          >
-            {m.content}
-          </li>
-        ))}
-      </ul>
+        <div className="mt-3">
+          <StatusPill label={pill} tone={tone} />
+        </div>
 
-      <div className="flex items-center justify-between text-sm">
-        <p className={notice ? "text-red-600" : "text-zinc-500"}>{notice || status}</p>
-        <div className="flex gap-3">
-          {speaking && (
-            <button type="button" onClick={stopSpeaking} className="text-indigo-600">
-              Stop speaking
+        <div className="flex w-full flex-1 items-center justify-center">
+          {recording ? (
+            <RecordingView analyserRef={analyserRef} onStop={stop} />
+          ) : (
+            <button
+              type="button"
+              onClick={interrupt}
+              disabled={!thinking && !speaking}
+              aria-label="Interrupt"
+              className="rounded-full disabled:cursor-default focus-visible:outline-2 focus-visible:outline-fg"
+            >
+              <Orb state={orbState} levelRef={levelRef} className="size-[min(78vw,46dvh,380px)]" />
             </button>
           )}
-          <button type="button" onClick={toggleVoice} aria-label={voiceOff ? "Turn voice on" : "Turn voice off"}>
-            {voiceOff ? "🔇" : "🔊"}
-          </button>
         </div>
-      </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input, "text");
-        }}
-        className="flex gap-2"
-      >
-        <button
-          type="button"
-          onClick={() => (live ? stopLive() : goLive(false))}
-          disabled={starting}
-          className="rounded-full bg-zinc-800 px-4 py-2 text-white disabled:opacity-50"
-        >
-          {live ? "Live ●" : "Live"}
-        </button>
+        <div className="flex min-h-24 w-full max-w-md flex-col items-center gap-1.5 text-center" aria-live="polite">
+          {title && <p className="text-[15px] font-medium">{title}</p>}
+          {notice ? (
+            <p className="text-[13px] leading-relaxed text-rec">{notice}</p>
+          ) : speaking ? (
+            <p className="line-clamp-3 font-display text-lg leading-snug text-fg/85">{detail}</p>
+          ) : (
+            detail && <p className="line-clamp-2 text-[13px] leading-relaxed text-muted">{detail}</p>
+          )}
+        </div>
 
-        {live && (
-          <button type="button" onClick={toggleMute} className="rounded-full bg-zinc-800 px-4 py-2 text-white">
-            {muted ? "Unmute" : "Mute"}
-          </button>
+        {!recording && (
+          <nav className="mt-4 mb-4 flex items-end justify-center gap-10" aria-label="Controls">
+            {live ? (
+              <RoundButton
+                icon={muted ? "micOff" : "mic"}
+                label={muted ? "Unmute" : "Mute"}
+                caption={muted ? "Unmute" : "Mute"}
+                onClick={toggleMute}
+                active={muted}
+                size="md"
+              />
+            ) : (
+              <RoundButton icon="micOff" label="Turn on Live voice" caption="Live" onClick={() => goLive(false)} disabled={starting} size="md" />
+            )}
+            <RoundButton icon="mic" label="Tap to talk" caption="Tap to talk" onClick={toggleMic} disabled={thinking || starting} size="lg" />
+            <RoundButton icon="chat" label="Type a question" caption="Type" onClick={() => setPanelOpen(!panelOpen)} active={panelOpen} size="md" />
+          </nav>
         )}
 
-        <button
-          type="button"
-          onClick={toggleMic}
-          disabled={loading || transcribing || (live && !muted) || starting}
+        <Disclosure extra={live && !muted ? "The mic is on while Live is on" : undefined} />
+      </main>
 
-          className={`rounded-full px-4 py-2 text-white disabled:opacity-50 ${recording ? "bg-red-600" : "bg-zinc-800"}`}
-        >
-          {recording ? "Stop" : "🎤"}
-        </button>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a question…"
-          maxLength={2000}
-          className="flex-1 rounded-full border border-zinc-300 px-4 py-2"
-        />
-        <button disabled={loading} className="rounded-full bg-indigo-600 px-5 py-2 text-white disabled:opacity-50">
-          Send
-        </button>
-      </form>
-      {footer}
-    </main>
+      {panelOpen && (
+        <Panel messages={messages} busy={loading} onSend={send} onReset={startOver} onClose={() => setPanelOpen(false)} />
+      )}
+    </div>
   );
 }

@@ -1,26 +1,46 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
+/* All colours, fonts and motion live here. Components use them as Tailwind classes (bg-surface, text-muted, font-display…). */
+/* inline: next/font sets these variables on <body>, so utilities must reference them directly */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-instrument), Georgia, serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@theme {
+  --color-bg: #050506;
+  --color-surface: #0f0f12;
+  --color-surface-2: #18181c;
+  --color-line: rgb(255 255 255 / 0.08);
+  --color-fg: #f4f4f6;
+  --color-muted: #8b8b94;
+  --color-faint: #55555d;
+  --color-rec: #f87171;
+
+  --animate-sheet-in: sheet-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade-in: fade-in 0.4s ease-out;
+
+  @keyframes sheet-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
   }
 }
 
+:root {
+  color-scheme: dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-bg font-sans text-fg antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
