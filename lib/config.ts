@@ -41,7 +41,7 @@ export const CHAT = {
 export const STT = {
   language: "en",
   // Vocabulary hint so Whisper spells names right.
-  prompt: "Interview questions for Rounak about ClauseGuard, MindDesk, IRIS, 100x, Kolhapur, Goa, AI agents.",
+  prompt: "Interview questions for Rounak about ClauseGuard, MindDesk, ReForge, LangGraph, IRIS, Kolhapur, Goa, AI agents. Why 100x?",
   maxBytes: 4 * 1024 * 1024,
   timeoutMs: 15_000,
   // Whisper invents whole sentences from coughs and noise. Measured average log-probability:
