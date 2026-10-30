@@ -314,7 +314,6 @@ export default function Home() {
           input={input}
           setInput={setInput}
           onSubmit={sendTyped}
-          onChip={(chip) => send(chip, "chip")}
           notice={notice}
           dictation={{ recording, transcribing, analyserRef, start: startDictation, stop: stopRecording }}
           onReset={startOver}

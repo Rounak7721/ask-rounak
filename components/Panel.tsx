@@ -5,15 +5,12 @@ import type { ChatMessage } from "@/lib/llm/types";
 import { Composer, type Dictation } from "./Composer";
 import { RoundButton } from "./RoundButton";
 
-const CHIPS = ["Tell me your life story", "What's your superpower?", "What are you proudest of?", "Why 100x?"];
-
 type Props = {
   messages: ChatMessage[];
   busy: boolean;
   input: string;
   setInput: (text: string) => void;
   onSubmit: () => void;
-  onChip: (text: string) => void;
   notice: string;
   dictation: Dictation;
   onReset: () => void;
@@ -30,9 +27,8 @@ function download(messages: ChatMessage[]) {
 }
 
 // Transcript + typing. A full-screen sheet on phones, a docked column on desktop.
-export function Panel({ messages, busy, input, setInput, onSubmit, onChip, notice, dictation, onReset, onClose }: Props) {
+export function Panel({ messages, busy, input, setInput, onSubmit, notice, dictation, onReset, onClose }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
-  const asked = messages.some((m) => m.role === "user");
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
@@ -62,22 +58,6 @@ export function Panel({ messages, busy, input, setInput, onSubmit, onChip, notic
           </p>
         ))}
       </div>
-
-      {!asked && (
-        <div className="flex flex-wrap gap-1.5 pb-3">
-          {CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => onChip(chip)}
-              disabled={busy}
-              className="rounded-full border border-line bg-surface px-3 py-1.5 text-[12.5px] transition hover:bg-surface-2 disabled:opacity-40"
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-      )}
 
       {notice && <p className="pb-2 text-center text-[12.5px] text-rec">{notice}</p>}
       <Composer input={input} setInput={setInput} busy={busy} onSubmit={onSubmit} dictation={dictation} />
