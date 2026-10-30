@@ -34,6 +34,7 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [transcribing, setTranscribing] = useState(false);
+  const [greetingPending, setGreetingPending] = useState(false); // Start tapped, greeting not playing yet
   const sessionIdRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const autoMutedRef = useRef(false);
@@ -81,9 +82,13 @@ export default function Home() {
     setNotice("");
     try {
       if ((await startLive()) && greet) {
-        speak(GREETING, () => setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]));
-      }
+        speak(GREETING, () => {
+          setGreetingPending(false);
+          setMessages((prev) => [...prev, { role: "assistant", content: GREETING }]);
+        });
+      } else setGreetingPending(false);
     } catch (err) {
+      setGreetingPending(false);
       setNotice(
         err instanceof DOMException && err.name === "NotAllowedError"
           ? MIC_BLOCKED
@@ -168,6 +173,7 @@ export default function Home() {
           sessionIdRef.current = crypto.randomUUID();
           unlock();
           setStarted(true);
+          setGreetingPending(true);
           goLive(true);
         }}
       />
@@ -175,11 +181,13 @@ export default function Home() {
   }
 
   const thinking = loading || transcribing;
+  const preparing = starting || greetingPending;
+  const voiceOn = live && !muted;
   const lastOf = (role: ChatMessage["role"]) => messages.findLast((m) => m.role === role)?.content ?? "";
 
-  const orbState: OrbState = thinking ? "thinking" : speaking ? "speaking" : live && muted ? "muted" : live ? "listening" : "idle";
+  const orbState: OrbState = preparing ? "idle" : thinking ? "thinking" : speaking ? "speaking" : voiceOn ? "listening" : "muted";
 
-  const [pill, tone]: [string, "live" | "rec" | "off"] = starting
+  const [pill, tone]: [string, "live" | "rec" | "off"] = preparing && !speaking
     ? ["Preparing", "off"]
     : recording
       ? ["Recording", "rec"]
@@ -187,13 +195,11 @@ export default function Home() {
         ? ["Thinking", "live"]
         : speaking
           ? ["Speaking", "live"]
-          : live && muted
-            ? ["Muted", "off"]
-            : live
-              ? ["Live", "live"]
-              : ["Live off", "off"];
+          : voiceOn
+            ? ["Live", "live"]
+            : ["Voice off", "off"];
 
-  const [title, detail] = starting
+  const [title, detail] = preparing && !speaking
     ? ["Preparing voice…", "Loading the speech model. You can type meanwhile."]
     : recording
       ? ["Tap stop when you're done", live ? "Live is paused while you record." : ""]
@@ -203,11 +209,9 @@ export default function Home() {
           ? ["Thinking…", lastOf("user")]
           : speaking
             ? ["", lastOf("assistant")]
-            : live && muted
-              ? ["Mic is off", "Nothing is sent while muted. Unmute, tap to talk, or type."]
-              : live
-                ? ["I'm listening", "Just start talking. Interrupt me any time."]
-                : ["Tap to talk or type", "Live voice is off."];
+            : voiceOn
+              ? ["I'm listening", "Just start talking. Interrupt me any time."]
+              : ["Voice mode is off", "The mic is off. Turn voice on, tap to talk, or type."];
 
   return (
     <div className="flex h-dvh overflow-hidden">
@@ -255,24 +259,22 @@ export default function Home() {
 
         {!recording && (
           <nav className="mt-4 mb-4 flex items-end justify-center gap-10" aria-label="Controls">
-            {live ? (
-              <RoundButton
-                icon={muted ? "micOff" : "mic"}
-                label={muted ? "Unmute" : "Mute"}
-                caption={muted ? "Unmute" : "Mute"}
-                onClick={toggleMute}
-                active={muted}
-                size="md"
-              />
-            ) : (
-              <RoundButton icon="micOff" label="Turn on Live voice" caption="Live" onClick={() => goLive(false)} disabled={starting} size="md" />
-            )}
-            <RoundButton icon="mic" label="Tap to talk" caption="Tap to talk" onClick={toggleMic} disabled={thinking || starting} size="lg" />
+            <RoundButton icon="mic" label="Tap to talk" caption="Tap to talk" onClick={toggleMic} disabled={thinking || starting} size="md" />
+            {/* Voice mode pauses the mic (model stays loaded, so turning it back on is instant). */}
+            <RoundButton
+              icon="voice"
+              label={voiceOn ? "Turn voice mode off" : "Turn voice mode on"}
+              caption={voiceOn ? "Voice on" : "Voice off"}
+              onClick={() => (live ? toggleMute() : goLive(false))}
+              active={voiceOn}
+              disabled={preparing}
+              size="lg"
+            />
             <RoundButton icon="chat" label="Type a question" caption="Type" onClick={() => setPanelOpen(!panelOpen)} active={panelOpen} size="md" />
           </nav>
         )}
 
-        <Disclosure extra={live && !muted ? "The mic is on while Live is on" : undefined} />
+        <Disclosure extra={voiceOn ? "The mic is on while voice mode is on" : undefined} />
       </main>
 
       {panelOpen && (
